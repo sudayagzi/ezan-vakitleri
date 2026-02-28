@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hayırlı Ramazanlar - Vakitler ve Hadisler</title>
+    <style>
+        body {
+            margin: 0; padding: 0; font-family: 'Segoe UI', sans-serif;
+            background: linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), 
+                        url('https://images.unsplash.com/photo-1551041777-ed318464f771?auto=format&fit=crop&w=1350&q=80');
+            background-size: cover; background-position: center; background-attachment: fixed;
+            color: white; display: flex; flex-direction: column; align-items: center; min-height: 100vh;
+        }
+        .container {
+            background: rgba(0, 0, 0, 0.8); padding: 25px; border-radius: 20px;
+            margin: 20px; text-align: center; border: 1px solid #d4af37;
+            width: 90%; max-width: 500px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        }
+        h1 { color: #d4af37; margin: 0; font-size: 28px; }
+        .date { font-size: 14px; color: #aaa; margin-bottom: 20px; }
+        .vakit-liste { display: flex; flex-direction: column; gap: 10px; margin-bottom: 25px; }
+        .vakit-item {
+            display: flex; justify-content: space-between; padding: 12px 20px;
+            background: rgba(255, 255, 255, 0.05); border-radius: 10px; font-size: 18px;
+        }
+        .vakit-ad { color: #d4af37; font-weight: bold; }
+        
+        /* Hadis Bölümü Stili */
+        .hadis-box {
+            background: rgba(212, 175, 55, 0.1);
+            border-left: 4px solid #d4af37;
+            padding: 15px;
+            margin-top: 10px;
+            border-radius: 5px;
+            font-style: italic;
+            line-height: 1.6;
+        }
+        .hadis-baslik {
+            display: block;
+            color: #d4af37;
+            font-weight: bold;
+            margin-bottom: 8px;
+            font-style: normal;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>🌙 Hayırlı Ramazanlar</h1>
+        <div id="date" class="date">Yükleniyor...</div>
+
+        <div class="vakit-liste" id="vakitler">
+            <div class="vakit-item"><span class="vakit-ad">İmsak</span> <span id="imsak">--:--</span></div>
+            <div class="vakit-item"><span class="vakit-ad">Öğle</span> <span id="ogle">--:--</span></div>
+            <div class="vakit-item"><span class="vakit-ad">İkindi</span> <span id="ikindi">--:--</span></div>
+            <div class="vakit-item"><span class="vakit-ad">İftar (Akşam)</span> <span id="aksam" style="color:#00ff00; font-weight:bold;">--:--</span></div>
+            <div class="vakit-item"><span class="vakit-ad">Yatsı</span> <span id="yatsi">--:--</span></div>
+        </div>
+
+        <div class="hadis-box">
+            <span class="hadis-baslik">📜 Günün Hadis-i Şerifi</span>
+            <div id="hadis-metni">Yükleniyor...</div>
+        </div>
+    </div>
+
+    <script>
+        // 1. Hadis Listesi (Her gün için farklı bir tane)
+        const hadisler = [
+            "Oruç tutunuz ki sıhhat bulasınız.",
+            "Ramazan ayı girdiğinde cennet kapıları açılır, cehennem kapıları kapanır.",
+            "Kim Allah rızası için bir gün oruç tutarsa, Allah onu cehennem ateşinden yetmiş yıl uzaklaştırır.",
+            "Oruçlu için iki sevinç vardır: Biri iftar ettiği vakit, diğeri Rabbine kavuştuğu vakit.",
+            "Hiçbiriniz, oruçlu olduğu gün çirkin söz söylemesin ve kimseyle çekişmesin.",
+            "Cennette 'Reyyân' denilen bir kapı vardır ki, kıyamet günü oradan ancak oruçlular girer.",
+            "Sahur yapınız, zira sahurda bolluk ve bereket vardır."
+        ];
+
+        // 2. Günün Hadisini Seçme (Tarihe göre)
+        function hadisGoster() {
+            const gun = new Date().getDate(); // Ayın kaçıncı günü olduğunu alır
+            const index = gun % hadisler.length; // Listedeki hadis sayısına göre döngü kurar
+            document.getElementById('hadis-metni').innerText = "\"" + hadisler[index] + "\"";
+        }
+
+        // 3. Vakitleri API'den Çekme
+        async function vakitleriGetir() {
+            try {
+                const response = await fetch('https://api.aladhan.com/v1/timingsByCity?city=Istanbul&country=Turkey&method=13');
+                const data = await response.json();
+                const t = data.data.timings;
+                
+                document.getElementById('imsak').innerText = t.Fajr;
+                document.getElementById('ogle').innerText = t.Dhuhr;
+                document.getElementById('ikindi').innerText = t.Asr;
+                document.getElementById('aksam').innerText = t.Maghrib;
+                document.getElementById('yatsi').innerText = t.Isha;
+                document.getElementById('date').innerText = data.data.date.readable;
+            } catch (e) {
+                console.log("Hata oluştu.");
+            }
+        }
+
+        hadisGoster();
+        vakitleriGetir();
+    </script>
+</body>
+</html>
