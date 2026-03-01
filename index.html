@@ -2,10 +2,12 @@
 <html lang="tr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ezan Vakti & Oyun</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Ezan Vakti & Akıllı Skor</title>
     <style>
         :root { --gold: #d4af37; --dark: #0a0a0a; }
+        * { -webkit-tap-highlight-color: transparent; user-select: none; touch-action: manipulation; }
+
         body {
             margin: 0; font-family: 'Segoe UI', sans-serif; background: var(--dark); color: white;
             display: flex; flex-direction: column; align-items: center; min-height: 100vh;
@@ -15,10 +17,9 @@
             background: linear-gradient(rgba(0,0,0,0.8), rgba(0,0,0,0.8)), url('https://images.unsplash.com/photo-1551041777-ed318464f771?auto=format&fit=crop&w=1350&q=80');
             background-size: cover; z-index: -1;
         }
-        .container { width: 90%; max-width: 400px; margin-top: 20px; display: none; text-align: center; padding-bottom: 100px; }
+        .container { width: 90%; max-width: 400px; margin-top: 20px; display: none; text-align: center; padding-bottom: 110px; }
         .active { display: block; animation: fadeIn 0.4s; }
         
-        /* Vakit Kartları */
         .vakit-item {
             display: flex; justify-content: space-between; padding: 12px 15px;
             background: rgba(255,255,255,0.07); border-radius: 12px; margin-bottom: 8px;
@@ -26,12 +27,10 @@
         }
         #countdown { font-size: 42px; color: var(--gold); font-weight: bold; margin: 15px 0; }
 
-        /* Oyun Alanı (Köstebek Mantığı) */
         .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 20px; }
         .hole { width: 100px; height: 100px; background: #1a1a1a; border-radius: 50%; position: relative; border: 2px solid #333; overflow: hidden; }
         .mole { position: absolute; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 40px; cursor: pointer; animation: popUp 0.6s ease-out; }
 
-        /* Alt Menü */
         .navbar {
             position: fixed; bottom: 0; width: 100%; background: #111;
             display: flex; justify-content: space-around; padding: 15px 0;
@@ -39,6 +38,15 @@
         }
         .nav-btn { color: var(--gold); font-size: 12px; cursor: pointer; text-align: center; opacity: 0.6; }
         .nav-btn.active-nav { opacity: 1; font-weight: bold; }
+
+        .game-info { background: rgba(212,175,55,0.1); padding: 10px; border-radius: 10px; margin-bottom: 10px; display: flex; justify-content: space-around; border: 1px solid var(--gold); }
+        
+        #leaderboard { 
+            margin-top: 20px; text-align: left; background: rgba(0,0,0,0.7); 
+            padding: 15px; border-radius: 12px; display: none; 
+            max-height: 250px; overflow-y: auto; border: 1px solid var(--gold);
+        }
+        .score-entry { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #333; font-size: 14px; }
 
         @keyframes popUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -64,13 +72,20 @@
 
     <div id="oyun" class="container">
         <h2 style="color:var(--gold)">🎮 Yıldız Avı</h2>
-        <div style="font-size:20px; margin-bottom:10px;">Puan: <span id="score">0</span></div>
+        <div id="player-display" style="font-size:12px; margin-bottom:5px; color:var(--gold)"></div>
+        <div class="game-info">
+            <div>Süre: <span id="timer" style="color:#e74c3c">30</span>s</div>
+            <div>Skor: <span id="score">0</span></div>
+        </div>
         <div class="grid">
             <div class="hole" id="h0"></div><div class="hole" id="h1"></div><div class="hole" id="h2"></div>
             <div class="hole" id="h3"></div><div class="hole" id="h4"></div><div class="hole" id="h5"></div>
             <div class="hole" id="h6"></div><div class="hole" id="h7"></div><div class="hole" id="h8"></div>
         </div>
-        <p style="font-size:12px; color:gray; margin-top:15px;">⭐ +50 Puan | 💣 -100 Puan</p>
+        <button id="start-btn" onclick="oyunBaslat()" style="margin-top:20px; background:var(--gold); border:none; padding:12px 25px; border-radius:8px; font-weight:bold; color:black;">OYUNU BAŞLAT</button>
+        
+        <p onclick="skorlariGoster()" style="color:var(--gold); text-decoration:underline; cursor:pointer; margin-top:20px; font-size: 14px;">🏆 Tüm Sıralamayı Gör</p>
+        <div id="leaderboard"></div>
     </div>
 
     <div class="navbar">
@@ -80,46 +95,28 @@
     </div>
 
     <script>
-        let aksamVakti = "";
-        let zikirCount = 0;
-        let score = 0;
-        let gameActive = false;
+        let aksamVakti = "", zikirCount = 0, score = 0, timeLeft = 30, gameActive = false, timerInterval;
+        let leaderData = JSON.parse(localStorage.getItem("leaderData")) || [];
+        let playerName = localStorage.getItem("playerName") || "";
 
-        // --- API VE VAKİTLER ---
+        // İsim kontrolü
+        if(playerName) document.getElementById('player-display').innerText = "Oyuncu: " + playerName;
+
         async function vakitleriGetir() {
-            const res = await fetch('https://api.aladhan.com/v1/timingsByCity?city=Istanbul&country=Turkey&method=13');
-            const data = await res.json();
-            const t = data.data.timings;
-            aksamVakti = t.Maghrib;
-
-            const vakitler = [
-                ["İmsak (Sahur)", t.Fajr],
-                ["Güneş", t.Sunrise],
-                ["Öğle", t.Dhuhr],
-                ["İkindi", t.Asr],
-                ["Akşam (İftar)", t.Maghrib],
-                ["Yatsı", t.Isha]
-            ];
-
-            document.getElementById('vakit-listesi').innerHTML = vakitler.map(v => `
-                <div class="vakit-item">
-                    <span style="color:var(--gold); font-weight:bold;">${v[0]}</span>
-                    <span>${v[1]}</span>
-                </div>
-            `).join('');
-
-            const hadisler = [
-                "Oruç tutunuz ki sıhhat bulasınız.",
-                "Sahur yapınız, sahurda bereket vardır.",
-                "Ramazan, evveli rahmet olan bir aydır."
-            ];
-            document.getElementById('hadis-box').innerText = "📜 " + hadisler[new Date().getDate() % 3];
+            try {
+                const res = await fetch('https://api.aladhan.com/v1/timingsByCity?city=Istanbul&country=Turkey&method=13');
+                const data = await res.json();
+                const t = data.data.timings;
+                aksamVakti = t.Maghrib;
+                const vakitler = [["İmsak", t.Fajr], ["Güneş", t.Sunrise], ["Öğle", t.Dhuhr], ["İkindi", t.Asr], ["Akşam", t.Maghrib], ["Yatsı", t.Isha]];
+                document.getElementById('vakit-listesi').innerHTML = vakitler.map(v => `<div class="vakit-item"><b>${v[0]}</b><span>${v[1]}</span></div>`).join('');
+                document.getElementById('hadis-box').innerText = "📜 Oruç tutun, sıhhat bulun.";
+            } catch(e) { console.log("Hata!"); }
         }
 
         setInterval(() => {
             if(!aksamVakti) return;
-            const simdi = new Date();
-            const hedef = new Date();
+            const simdi = new Date(); const hedef = new Date();
             hedef.setHours(...aksamVakti.split(':'), 0);
             let fark = hedef - simdi;
             if(fark < 0) { document.getElementById('countdown').innerText = "Hayırlı İftarlar!"; return; }
@@ -129,39 +126,90 @@
             document.getElementById('countdown').innerText = `${h}:${m}:${s}`;
         }, 1000);
 
-        // --- SEKME YÖNETİMİ ---
         function tabSec(id, btn) {
             document.querySelectorAll('.container').forEach(c => c.classList.remove('active'));
             document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active-nav'));
             document.getElementById(id).classList.add('active');
             btn.classList.add('active-nav');
-            gameActive = (id === 'oyun');
-            if(gameActive) oyunBaslat();
+            if(id !== 'oyun') oyunDurdur();
         }
 
-        // --- ZİKİRMATİK ---
         function zikirArtir() { zikirCount++; document.getElementById('zikir-ekran').innerText = zikirCount; }
         function zikirSifirla() { zikirCount = 0; document.getElementById('zikir-ekran').innerText = 0; }
 
-        // --- OYUN (KÖSTEBEK MANTIĞI) ---
         function oyunBaslat() {
-            if(!gameActive) return;
-            const holeId = "h" + Math.floor(Math.random()*9);
-            const hole = document.getElementById(holeId);
-            const isBomb = Math.random() > 0.8; 
+            if(!playerName) {
+                playerName = prompt("Sıralama için ismini yaz (Bir kez sorulacak):") || "Misafir";
+                localStorage.setItem("playerName", playerName);
+                document.getElementById('player-display').innerText = "Oyuncu: " + playerName;
+            }
+            score = 0; timeLeft = 30; gameActive = true;
+            document.getElementById('score').innerText = 0;
+            document.getElementById('timer').innerText = 30;
+            document.getElementById('start-btn').style.display = 'none';
+            document.getElementById('leaderboard').style.display = 'none';
+            
+            timerInterval = setInterval(() => {
+                timeLeft--;
+                document.getElementById('timer').innerText = timeLeft;
+                if(timeLeft <= 0) oyunBitti();
+            }, 1000);
+            moleCikar();
+        }
 
+        function moleCikar() {
+            if(!gameActive) return;
+            const hole = document.getElementById("h" + Math.floor(Math.random()*9));
+            const isBomb = Math.random() > 0.8;
             const item = document.createElement('div');
             item.className = 'mole';
             item.innerHTML = isBomb ? '💣' : '⭐';
-            
-            item.onclick = () => {
-                if(isBomb) score -= 100; else score += 50;
-                document.getElementById('score').innerText = score;
-                item.remove();
+            item.onclick = (e) => { 
+                e.stopPropagation();
+                if(gameActive) { 
+                    isBomb ? score -= 100 : score += 50; 
+                    document.getElementById('score').innerText = score; 
+                    item.remove(); 
+                } 
             };
-
             hole.appendChild(item);
-            setTimeout(() => { if(item) item.remove(); if(gameActive) oyunBaslat(); }, 800);
+            setTimeout(() => { if(item.parentNode) item.remove(); if(gameActive) moleCikar(); }, 800);
+        }
+
+        function oyunBitti() {
+            gameActive = false; clearInterval(timerInterval);
+            document.getElementById('start-btn').style.display = 'inline-block';
+            document.getElementById('start-btn').innerText = 'YENİDEN DENE';
+            
+            // Skor Güncelleme Mantığı
+            let userIndex = leaderData.findIndex(u => u.name === playerName);
+            
+            if(userIndex > -1) {
+                // Eğer oyuncu listede varsa ve yeni skoru eskisinden yüksekse güncelle
+                if(score > leaderData[userIndex].score) {
+                    leaderData[userIndex].score = score;
+                }
+            } else {
+                // Oyuncu listede yoksa yeni ekle
+                leaderData.push({name: playerName, score: score});
+            }
+
+            leaderData.sort((a,b) => b.score - a.score);
+            localStorage.setItem("leaderData", JSON.stringify(leaderData));
+            skorlariGoster();
+        }
+
+        function oyunDurdur() { gameActive = false; clearInterval(timerInterval); document.querySelectorAll('.mole').forEach(m => m.remove()); document.getElementById('start-btn').style.display = 'inline-block'; }
+
+        function skorlariGoster() {
+            const lb = document.getElementById('leaderboard');
+            lb.style.display = 'block';
+            lb.innerHTML = "<b style='color:var(--gold)'>🏆 Sıralama (En İyi Skorun):</b><hr style='border:0.5px solid #333; margin:10px 0;'>" + 
+                leaderData.map((l, i) => `
+                <div class="score-entry">
+                    <span style="${l.name === playerName ? 'color:var(--gold); font-weight:bold;' : ''}">${i+1}. ${l.name}</span>
+                    <span style="color:var(--gold); font-weight:bold;">${l.score}</span>
+                </div>`).join('');
         }
 
         vakitleriGetir();
